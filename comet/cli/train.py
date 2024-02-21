@@ -60,6 +60,9 @@ def read_arguments() -> ArgumentParser:
         help="Training Seed.",
     )
     parser.add_argument("--cfg", action=ActionConfigFile)
+    parser.add_argument("--train-data", nargs="+")
+    parser.add_argument("--validation-data", nargs="+")
+    parser.add_argument("--model-checkpoint-dirpath", default=None)
     parser.add_subclass_arguments(RegressionMetric, "regression_metric")
     parser.add_subclass_arguments(
         ReferencelessRegression, "referenceless_regression_metric"
@@ -75,6 +78,11 @@ def read_arguments() -> ArgumentParser:
         default=None,
     )
     parser.add_argument(
+        "--pretrained_model",
+        help="Baseline pretrained model",
+        default=None,
+    )
+    parser.add_argument(
         "--strict_load",
         action="store_true",
         help="Strictly enforce that the keys in checkpoint_path match the keys returned by this module's state dict.",
@@ -83,8 +91,11 @@ def read_arguments() -> ArgumentParser:
 
 
 def initialize_trainer(configs) -> Trainer:
+    configs_dict = namespace_to_dict(configs.model_checkpoint.init_args)
+    if configs.model_checkpoint_dirpath:
+        configs_dict["dirpath"] = configs.model_checkpoint_dirpath
     checkpoint_callback = ModelCheckpoint(
-        **namespace_to_dict(configs.model_checkpoint.init_args)
+        **configs_dict
     )
     early_stop_callback = EarlyStopping(
         **namespace_to_dict(configs.early_stopping.init_args)
@@ -108,16 +119,23 @@ def initialize_model(configs):
                 default=lambda x: x.__dict__,
             )
         )
+        configs_dict = namespace_to_dict(configs.regression_metric.init_args)
+        if configs.pretrained_model:
+            configs_dict["pretrained_model"] = configs.pretrained_model
+        if configs.train_data:
+            configs_dict["train_data"] = configs.train_data
+        if configs.validation_data:
+            configs_dict["validation_data"] = configs.validation_data
         if configs.load_from_checkpoint is not None:
             logger.info(f"Loading weights from {configs.load_from_checkpoint}.")
             model = RegressionMetric.load_from_checkpoint(
                 checkpoint_path=configs.load_from_checkpoint,
                 strict=configs.strict_load,
-                **namespace_to_dict(configs.regression_metric.init_args),
+                **configs_dict,
             )
         else:
             model = RegressionMetric(
-                **namespace_to_dict(configs.regression_metric.init_args)
+                **configs_dict,
             )
     elif configs.referenceless_regression_metric is not None:
         print(
@@ -127,16 +145,25 @@ def initialize_model(configs):
                 default=lambda x: x.__dict__,
             )
         )
+
+        configs_dict = namespace_to_dict(configs.referenceless_regression_metric.init_args)
+        if configs.pretrained_model:
+            configs_dict["pretrained_model"] = configs.pretrained_model
+        if configs.train_data:
+            configs_dict["train_data"] = configs.train_data
+        if configs.validation_data:
+            configs_dict["validation_data"] = configs.validation_data
+            
         if configs.load_from_checkpoint is not None:
             logger.info(f"Loading weights from {configs.load_from_checkpoint}.")
             model = ReferencelessRegression.load_from_checkpoint(
                 checkpoint_path=configs.load_from_checkpoint,
                 strict=configs.strict_load,
-                **namespace_to_dict(configs.referenceless_regression_metric.init_args),
+                **configs_dict,
             )
         else:
             model = ReferencelessRegression(
-                **namespace_to_dict(configs.referenceless_regression_metric.init_args)
+                **configs_dict,
             )
     elif configs.ranking_metric is not None:
         print(
@@ -194,3 +221,4 @@ def train_command() -> None:
 
 if __name__ == "__main__":
     train_command()
+
